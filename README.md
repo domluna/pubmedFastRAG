@@ -1,5 +1,7 @@
 # pubmedFastRAG
 
+> TLDR: Using binary RAG search, we can perform exact searches on PubMed in approximately 100ms end-to-end.
+
 This builds off of https://github.com/kyunghyuncho/pubmed-vectors by leveraging extremely fast binary exact search.
 
 The original embeddings, which were ~110GB, are compressed to 512 dimensions instead of 768 through [MRL](https://blog.nomic.ai/posts/nomic-embed-matryoshka). The 512 float32 values are then quantized to binary, resulting in 64 uint8 values. These values are then reinterpreted as 8 uint64 values which can be compared against each other with a single SIMD operation.
