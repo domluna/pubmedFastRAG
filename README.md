@@ -2,7 +2,7 @@
 
 This builds off of https://github.com/kyunghyuncho/pubmed-vectors by leveraging extremely fast binary exact search.
 
-The original embeddings, which were ~110GB are compressed to 512 dimensions instead of 768 through [MRL](https://blog.nomic.ai/posts/nomic-embed-matryoshka). The 512 float32 values are then quantized to binary, resulting in 64 uint8 values. These values are then reinterpreted as 8 uint64 values which can be compared against each other with a single SIMD operation.
+The original embeddings, which were ~110GB, are compressed to 512 dimensions instead of 768 through [MRL](https://blog.nomic.ai/posts/nomic-embed-matryoshka). The 512 float32 values are then quantized to binary, resulting in 64 uint8 values. These values are then reinterpreted as 8 uint64 values which can be compared against each other with a single SIMD operation.
 
 - `rag.jl` - This file contains the `RAGServer` which exposes an endpoint @ '0.0.0.0:8003/find_matches'. This endpoint accepts a POST request with a query (str) and k (int). `k` is the number of most relevant results to return.
 - `embed.py` - This file contains a server that takes a query and returns a list of 64 uint8 values. This is called internally by `RAGServer`.
@@ -31,7 +31,7 @@ rag = RAGServer("databases/pubmed_data.db")
 start_server(rag)
 ```
 
-You need the binary data for RAG. If you're interested in them message me.
+You need the binary data for RAG. If you're interested in them, message me.
 
 ```sh
 λ ~/code/pubmedRAG: ls -lh bindata/
@@ -110,7 +110,7 @@ Abstract: The identification of protein-protein interaction disruptors (PPIDs) t
 
 ## Timings
 
-On my machine after JIT compilation here are the RAG timings (in seconds)
+On my machine, after JIT compilation, here are the RAG timings (in seconds):
 
 ```
 Time taken for RAG 0.09114909172058105
@@ -121,12 +121,11 @@ Time taken for RAG 0.08925509452819824
 Time taken for DB query 0.04568600654602051
 ```
 
-For embeddings (in seconds).
+For embeddings (in seconds):
 
 ```
 {'tokenization': 0.016788721084594727, 'model_inference': 0.0098114013671875, 'post_processing': 0.00022363662719726562, 'quantization': 2.5272369384765625e-05, 'total': 0.026870012283325195}
 'total': 0.026870012283325195
 ```
 
-
-Using CPU or GPU doesn't match a noticeable difference. The RAG timings do not differ either.
+Using CPU or GPU doesn't make a noticeable difference. The RAG timings do not differ either.
