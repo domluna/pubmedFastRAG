@@ -37,7 +37,6 @@ def mean_pooling(model_output, attention_mask):
     )
 
 
-# Function to embed text snippets
 def embed_text(text: str) -> (np.ndarray, dict):
     timings = {}
 
@@ -46,7 +45,7 @@ def embed_text(text: str) -> (np.ndarray, dict):
     with torch.no_grad():
         tokenize_start = time.time()
         inputs = tokenizer(
-            "search_document: " + text,
+            "search_query: " + text,
             padding=True,
             truncation=True,
             return_tensors="pt",
@@ -64,13 +63,13 @@ def embed_text(text: str) -> (np.ndarray, dict):
     embeddings = mean_pooling(outputs, inputs["attention_mask"])
     embeddings = F.layer_norm(embeddings, normalized_shape=(embeddings.shape[1],))
     embeddings = embeddings[:, :MATRYOSHKA_DIM]
-    embeddings = F.normalize(embeddings, p=2, dim=1).cpu().numpy()
+    embeddings = F.normalize(embeddings, p=2, dim=1).cpu().numpy().reshape(-1)
 
     process_end = time.time()
     timings["post_processing"] = process_end - process_start
 
     quantize_start = time.time()
-    quantized_embeddings = np.packbits(embeddings > 0).reshape(embeddings.shape[0], -1)
+    quantized_embeddings = np.packbits(embeddings > 0)
     quantize_end = time.time()
     timings["quantization"] = quantize_end - quantize_start
 
