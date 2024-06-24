@@ -8,8 +8,8 @@ import time
 import uvicorn
 
 MATRYOSHKA_DIM = 512
+# CPU is also very fast and doesn't add noticeable overhead to the RAG route
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("DEVICE", DEVICE)
 
 app = FastAPI()
 
@@ -45,9 +45,14 @@ def embed_text(text: str) -> (np.ndarray, dict):
     with torch.no_grad():
         tokenize_start = time.time()
         inputs = tokenizer(
-            "search_query: " + text,
-            padding=True,
-            truncation=True,
+            # the embeddings are prepended with search_document
+            # so if this is prepended here it favours title only
+            # papers. this "search" or "search_document" is a full match
+            # "search_query: " + text,
+            text,
+            # only need this if multiple texts
+            # padding=True,
+            # truncation=True,
             return_tensors="pt",
         ).to(DEVICE)
         tokenize_end = time.time()
