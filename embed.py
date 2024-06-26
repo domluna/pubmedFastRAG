@@ -18,6 +18,7 @@ model = None
 
 class TextInput(BaseModel):
     text: str
+    only_binary: bool = True
 
 
 def mean_pooling(model_output, attention_mask):
@@ -76,11 +77,12 @@ async def embed(input: TextInput):
     try:
         embedding, binary_embeddings, timings = embed_text(input.text)
         print(timings)
-
-        return {
-            "embedding": embedding.tolist(),
+        d = {
             "binary_embedding": binary_embeddings.tolist(),
         }
+        if not input.only_binary:
+            d["embedding"] = embedding.tolist()
+        return d
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

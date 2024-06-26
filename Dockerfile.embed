@@ -1,0 +1,24 @@
+# Use an official Python runtime as the base image
+FROM python:3.11-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir fastapi uvicorn pydantic numpy transformers fire einops
+
+# Copy the current directory contents into the container at /app
+COPY embed.py /app
+
+# Make port 8002 available to the world outside this container
+EXPOSE 8002
+
+# Run the application
+CMD ["python", "embed.py"]
