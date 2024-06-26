@@ -13,13 +13,13 @@ def find_matches(text, k=5):
 
 
 if __name__ == "__main__":
-    # text = "What is the role of GLP-1 and GLP-1 agonists in losing excess weight?"
-    text = "What are the biologies of TEAD?"
+    text = "What is the role of GLP-1 and GLP-1 agonists in losing excess weight?"
+    # text = "What are the biologies of TEAD?"
 
     matches = find_matches(text)
 
     for match in matches:
-        print(f"ID: {match['id']}, Distance: {match['distance']}")
+        print(f"ID: {match['pmid']}, Distance: {match['distance']}")
         print(f"Title: {match['title']}")
         print(f"Authors: {match['authors']}")
         print(f"Publication Year: {match['publication_year']}")

@@ -1,6 +1,6 @@
 using Base.Threads
 using StaticArrays
-using JSON
+using JSON3
 using HTTP
 using SQLite
 using DataFrames
@@ -44,6 +44,7 @@ function get_article_data(db::SQLite.DB, pmids::Vector{String})
   article_data = Dict{String,Dict{String,Any}}()
   for row in eachrow(df)
     article_data[string(row.pmid)] = Dict(
+      "pmid" => row.pmid,
       "title" => !ismissing(row.title) ? row.title : "Title not found",
       "authors" =>
         !ismissing(row.authors) ? row.authors : "Authors not found",
@@ -58,6 +59,25 @@ function get_article_data(db::SQLite.DB, pmids::Vector{String})
   return article_data
 end
 
+struct EmbedResponse
+  embedding::Vector{Float32}
+  binary_embedding::Vector{UInt8}
+end
+
+struct FindMatchesRequest
+  query::String
+  k::Int
+end
+
+struct FindMatchesResponse
+  pmid::Int
+  distance::Int
+  authors::String
+  title::String
+  abstract::String
+  publication_year::Int
+end
+
 function start_server(rag::RAGServer; port::Int = 8003)
   router = HTTP.Router()
 
@@ -68,30 +88,17 @@ function start_server(rag::RAGServer; port::Int = 8003)
     "/find_matches",
     function (req)
       try
-        body = JSON.parse(String(req.body))
+        body = try
+          JSON3.read(String(req.body), FindMatchesRequest)
+        catch
+          return HTTP.Response(400, "invalid JSON body")
+        end
 
-        # Validate query
-        if !haskey(body, "query") ||
-           !(body["query"] isa String) ||
-           isempty(body["query"])
+        if body.k <= 0 || body.k > 100
           return HTTP.Response(
             400,
-            "Invalid or missing 'query' parameter. Must be a non-empty string.",
+            "'k' parameter must be a positive integer and <= 100.",
           )
-        end
-        query_text = body["query"]
-
-        # Validate k
-        k = if haskey(body, "k")
-          if !(body["k"] isa Integer) || body["k"] <= 0
-            return HTTP.Response(
-              400,
-              "'k' parameter must be a positive integer.",
-            )
-          end
-          body["k"]
-        else
-          20  # Default value
         end
 
         # Call embed service
@@ -99,13 +106,10 @@ function start_server(rag::RAGServer; port::Int = 8003)
           HTTP.post(
             "http://0.0.0.0:8002/embed",
             ["Content-Type" => "application/json"],
-            JSON.json(Dict("text" => query_text)),
+            JSON3.write(Dict("text" => body.query)),
           )
         catch e
-          return HTTP.Response(
-            503,
-            "Error connecting to embed service: $(sprint(showerror, e))",
-          )
+          return HTTP.Response(500, "Internal server error")
         end
 
         if embed_response.status != 200
@@ -116,41 +120,22 @@ function start_server(rag::RAGServer; port::Int = 8003)
         end
 
         embed_body = try
-          JSON.parse(String(embed_response.body))
+          JSON3.read(String(embed_response.body), EmbedResponse)
         catch e
-          return HTTP.Response(
-            502,
-            "Invalid response from embed service: $(sprint(showerror, e))",
-          )
+          return HTTP.Response(500, "Internal server error")
         end
 
-        if !haskey(embed_body, "binary_embedding") ||
-           !(embed_body["binary_embedding"] isa Vector)
+        if length(embed_body.binary_embedding) != 64
           return HTTP.Response(
             502,
-            "Invalid response format from embed service",
-          )
-        end
-
-        query = try
-          UInt8.(embed_body["binary_embedding"])
-        catch e
-          return HTTP.Response(
-            502,
-            "Invalid embedding data from embed service: $(sprint(showerror, e))",
-          )
-        end
-
-        if length(query) != 64
-          return HTTP.Response(
-            400,
             "Embedded query must be an array of 64 UInt8 elements",
           )
         end
 
-        query_uint64 = SVector{8,UInt64}(reinterpret(UInt64, query))
+        query_uint64 =
+          SVector{8,UInt64}(reinterpret(UInt64, embed_body.binary_embedding))
         t1 = time()
-        results = k_closest_parallel(rag.data, query_uint64, k)
+        results = k_closest_parallel(rag.data, query_uint64, body.k)
         t2 = time()
         println("Time taken for RAG $(t2 - t1)")
 
@@ -161,27 +146,28 @@ function start_server(rag::RAGServer; port::Int = 8003)
         t2 = time()
         println("Time taken for DB query $(t2 - t1)")
 
-        response = [
-          Dict(
-            "id" => rag.ids[result.second],
-            "distance" => result.first,
-            "title" =>
-              get(article_data, string(rag.ids[result.second]), Dict())["title"],
-            "authors" =>
-              get(article_data, string(rag.ids[result.second]), Dict())["authors"],
-            "abstract" =>
-              get(article_data, string(rag.ids[result.second]), Dict())["abstract"],
-            "publication_year" =>
-              get(article_data, string(rag.ids[result.second]), Dict())["publication_year"],
-          ) for result in results
-        ]
+        response = FindMatchesResponse[]
+        for r in results
+          id = string(rag.ids[r.second])
+          !haskey(article_data, id) && continue
+          a = article_data[id]
+          push!(
+            response,
+            FindMatchesResponse(
+              parse(Int, a["pmid"]),
+              r.first,
+              a["authors"],
+              a["title"],
+              a["abstract"],
+              a["publication_year"],
+            ),
+          )
+        end
 
-        return HTTP.Response(200, JSON.json(response))
+        return HTTP.Response(200, JSON3.write(response))
       catch e
-        return HTTP.Response(
-          500,
-          "Internal server error: $(sprint(showerror, e))",
-        )
+        @info "error" e
+        return HTTP.Response(500, "Internal server error")
       end
     end,
   )
@@ -276,49 +262,6 @@ function heapify!(heap::MaxHeap, i::Int)
     heapify!(heap, largest)
   end
 end
-
-function _k_closest(
-  db::AbstractVector{V},
-  query::AbstractVector{T},
-  k::Int;
-  startind::Int = 1,
-) where {T<:Integer,V<:AbstractVector{T}}
-  heap = MaxHeap(k)
-  @inbounds for i in eachindex(db)
-    d = hamming_distance(db[i], query)
-    insert!(heap, d => startind + i - 1)
-  end
-  return heap.data
-end
-
-function k_closest(
-  db::AbstractVector{V},
-  query::AbstractVector{T},
-  k::Int;
-  startind::Int = 1,
-) where {T<:Integer,V<:AbstractVector{T}}
-  data = _k_closest(db, query, k; startind = startind)
-  return sort!(data, by = x -> x.first)
-end
-
-function k_closest_parallel(
-  db::AbstractArray{V},
-  query::AbstractVector{T},
-  k::Int;
-  t::Int = nthreads(),
-) where {T<:Integer,V<:AbstractVector{T}}
-  n = length(db)
-  if n < 10_000 || t == 1
-    return k_closest(db, query, k)
-  end
-  task_ranges = [(i:min(i + n ÷ t - 1, n)) for i in 1:n÷t:n]
-  tasks = map(task_ranges) do r
-    Threads.@spawn _k_closest(view(db, r), query, k; startind = r[1])
-  end
-  results = fetch.(tasks)
-  sort!(vcat(results...), by = x -> x.first)[1:k]
-end
-
 
 function _k_closest(
   db::AbstractMatrix{T},
