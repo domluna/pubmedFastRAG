@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pubmed Paper RAG Search</title>
+  <style>
+    :root {
+      --primary-color: #4a90e2;
+      --background-color: #f5f7fa;
+      --card-background: #ffffff;
+      --text-color: #333333;
+      --text-secondary: #666666;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: var(--text-color);
+      background-color: var(--background-color);
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: var(--primary-color);
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .search-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+
+    .search-controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+
+    input,
+    button {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+
+    input[type="text"] {
+      flex-grow: 1;
+    }
+
+    input[type="number"] {
+      width: 60px;
+    }
+
+
+    .settings-icon {
+      user-select: none;
+      cursor: pointer;
+    }
+
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      flex-grow: 1;
+    }
+
+    button:hover {
+      background-color: #3a7bc8;
+    }
+
+    .results {
+      display: grid;
+      gap: 20px;
+    }
+
+    .card {
+      background-color: var(--card-background);
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .card h2 {
+      color: var(--primary-color);
+      margin-top: 0;
+    }
+
+    .card p {
+      margin: 10px 0;
+    }
+
+    .card .meta {
+      color: var(--text-secondary);
+      font-size: 0.9em;
+      margin-bottom: 10px;
+    }
+
+    .card .abstract {
+      margin-bottom: 15px;
+    }
+
+    .card .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card .pubmed-link {
+      color: var(--primary-color);
+      text-decoration: none;
+    }
+
+    .card .pubmed-link:hover {
+      text-decoration: underline;
+    }
+
+    .card .distance {
+      color: var(--text-secondary);
+      font-size: 0.9em;
+    }
+
+    #loading {
+      text-align: center;
+      color: var(--text-secondary);
+      display: none;
+    }
+
+    #settings-panel {
+      display: none;
+      background-color: var(--card-background);
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slider {
+      flex-grow: 1;
+    }
+
+    .settings-explanation {
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+
+
+<body>
+  <div class="container">
+    <h1>Pubmed Paper RAG Search</h1>
+    <div class="search-form">
+      <textarea id="query" placeholder="Enter your search query (max 200 characters)" maxlength="200"
+        rows="3"></textarea>
+      <div class="search-controls">
+        <button onclick="search()">Search</button>
+        <div class="settings-icon" onclick="toggleSettings()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide lucide-settings">
+            <path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div id="settings-panel">
+      <h3>Search Settings</h3>
+      <div class="slider-container">
+        <label for="k-slider">Number of matches:</label>
+        <input type="range" id="k-slider" class="slider" min="1" max="50" value="5">
+        <span id="k-value">5</span>
+      </div>
+      <p class="settings-explanation">
+        Adjust the slider to set the number of matching papers to return. A higher number will provide more results but
+        may include less relevant papers.
+      </p>
+    </div>
+    <div id="loading">Searching...</div>
+    <div id="results" class="results"></div>
+  </div>
+
+  <script>
+    const kSlider = document.getElementById('k-slider');
+    const kValue = document.getElementById('k-value');
+
+    kSlider.addEventListener('input', function () {
+      kValue.textContent = this.value;
+    });
+
+    function toggleSettings() {
+      const settingsPanel = document.getElementById('settings-panel');
+      if (settingsPanel.style.display === 'none' || settingsPanel.style.display === '') {
+        settingsPanel.style.display = 'block';
+      } else {
+        settingsPanel.style.display = 'none';
+      }
+    }
+
+    async function search() {
+      const query = document.getElementById('query').value.trim();
+      if (!query) {
+        alert('Please enter a search query.');
+        return;
+      }
+
+      const k = document.getElementById('k-slider').value;
+      const resultsDiv = document.getElementById('results');
+      const loadingDiv = document.getElementById('loading');
+
+      resultsDiv.innerHTML = '';
+      loadingDiv.style.display = 'block';
+
+      try {
+        const response = await fetch('/search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({query, k: parseInt(k)}),
+        });
+        const results = await response.json();
+        displayResults(results);
+      } catch (error) {
+        console.error('Error:', error);
+        resultsDiv.innerHTML = '<p>An error occurred while searching. Please try again.</p>';
+      } finally {
+        loadingDiv.style.display = 'none';
+      }
+    }
+
+    function displayResults(results) {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = results.map(result => `
+        <div class="card">
+          <h2>${result.title}</h2>
+          <p class="meta">${result.authors} (${result.publication_year})</p>
+          <p class="abstract">${result.abstract}</p>
+          <div class="footer">
+            <a href="https://pubmed.ncbi.nlm.nih.gov/${result.pmid}/" target="_blank" class="pubmed-link">View on PubMed</a>
+            <span class="distance">Distance: ${result.distance.toFixed(4)}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+
+</html>

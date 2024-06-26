@@ -6,21 +6,14 @@ from transformers import AutoTokenizer, AutoModel
 import torch.nn.functional as F
 import time
 import uvicorn
+import fire
 
 MATRYOSHKA_DIM = 512
-# CPU is also very fast and doesn't add noticeable overhead to the RAG route
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 app = FastAPI()
 
-# Load the tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained(
-    "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
-)
-model = AutoModel.from_pretrained(
-    "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
-).to(DEVICE)
-model.eval()
+tokenizer = None
+model = None
 
 
 class TextInput(BaseModel):
@@ -38,6 +31,7 @@ def mean_pooling(model_output, attention_mask):
 
 
 def embed_text(text: str) -> (np.ndarray, dict):
+    global tokenizer, model
     timings = {}
 
     start_time = time.time()
@@ -45,16 +39,9 @@ def embed_text(text: str) -> (np.ndarray, dict):
     with torch.no_grad():
         tokenize_start = time.time()
         inputs = tokenizer(
-            # the embeddings are prepended with search_document
-            # so if this is prepended here it favours title only
-            # papers. this "search" or "search_document" is a full match
-            # "search_query: " + text,
             text,
-            # only need this if multiple texts
-            # padding=True,
-            # truncation=True,
             return_tensors="pt",
-        ).to(DEVICE)
+        ).to(model.device)
         tokenize_end = time.time()
         timings["tokenization"] = tokenize_end - tokenize_start
 
@@ -98,5 +85,26 @@ async def embed(input: TextInput):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def main(port: int = 8002, device: str = "cpu"):
+    global tokenizer, model
+
+    # Set the device
+    device = torch.device(
+        device if torch.cuda.is_available() and device == "cuda" else "cpu"
+    )
+    print(f"Using device: {device}")
+
+    # Load the tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(
+        "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
+    )
+    model = AutoModel.from_pretrained(
+        "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
+    ).to(device)
+    model.eval()
+
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    fire.Fire(main)
