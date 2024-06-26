@@ -202,6 +202,7 @@
           </svg>
         </div>
       </div>
+      <p id="search-duration" style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9em;"></p>
     </div>
     <div id="settings-panel">
       <h3>Search Settings</h3>
@@ -246,11 +247,14 @@
       const k = document.getElementById('k-slider').value;
       const resultsDiv = document.getElementById('results');
       const loadingDiv = document.getElementById('loading');
+      const searchDurationEl = document.getElementById('search-duration');
 
       resultsDiv.innerHTML = '';
       loadingDiv.style.display = 'block';
+      searchDurationEl.textContent = '';
 
       try {
+        const t1 = performance.now();
         const response = await fetch('/search', {
           method: 'POST',
           headers: {
@@ -258,7 +262,10 @@
           },
           body: JSON.stringify({query, k: parseInt(k)}),
         });
+        const t2 = performance.now();
+        const duration = (t2 - t1) / 1000;
         const results = await response.json();
+        searchDurationEl.textContent = `Search time taken: ${duration.toPrecision(3)} seconds`;
         displayResults(results);
       } catch (error) {
         console.error('Error:', error);

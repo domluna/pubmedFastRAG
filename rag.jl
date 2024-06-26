@@ -81,7 +81,6 @@ end
 function start_server(rag::RAGServer; port::Int = 8003)
   router = HTTP.Router()
 
-  # body should {query: str, k: int}
   HTTP.register!(
     router,
     "POST",
