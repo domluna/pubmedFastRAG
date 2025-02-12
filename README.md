@@ -33,7 +33,7 @@ rag = RAGServer("databases/pubmed_data.db")
 start_server(rag)
 ```
 
-You need the binary data for RAG. If you're interested in them, message me.
+You need the binary data for RAG. If you're interested in them, here's the [Google Drive link](https://drive.google.com/file/d/1LuCaUcILQuQgkDm3_tWBWr4X7AQ518kX/view?usp=sharing).
 
 ```sh
 λ ~/code/pubmedRAG: ls -lh bindata/
